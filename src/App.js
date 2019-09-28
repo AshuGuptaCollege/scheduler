@@ -1,24 +1,57 @@
 import React, { useState, useEffect } from 'react';
 import 'rbx/index.css';
-import { Button, Container, Title } from 'rbx';
+import { Button, Container, Title, Message } from 'rbx';
 import firebase from 'firebase/app';
 import 'firebase/database';
+import 'firebase/auth';
+import StyledFirebaseAuth from 'react-firebaseui/StyledFirebaseAuth';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCuFf9lnNfXvVZGCsoGKuqy0zp4yqr4sAg",
-  authDomain: "...",
+  authDomain: "scheduler-41ed5.firebaseapp.com",
   databaseURL: "https://scheduler-41ed5.firebaseio.com",
   projectId: "scheduler-41ed5",
-  storageBucket: "....",
+  storageBucket: "",
   messagingSenderId: "543717696227",
-  appId: "..."
+  appId: "1:543717696227:web:8e1371efc252a1782d9bd6"
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database().ref();
 
-const Banner = ({ title }) => (
-  <Title>{ title || '[loading...]' }</Title>
+const uiConfig = {
+  signInFlow: 'popup',
+  signInOptions: [
+    firebase.auth.GoogleAuthProvider.PROVIDER_ID
+  ],
+  callbacks: {
+    signInSuccessWithAuthResult: () => false
+  }
+};
+
+const Welcome = ({ user }) => (
+  <Message color="info">
+    <Message.Header>
+      Welcome, {user.displayName}
+      <Button primary onClick={() => firebase.auth().signOut()}>
+        Log out
+      </Button>
+    </Message.Header>
+  </Message>
+);
+
+const SignIn = () => (
+  <StyledFirebaseAuth
+    uiConfig={uiConfig}
+    firebaseAuth={firebase.auth()}
+  />
+);
+
+const Banner = ({ user, title }) => (
+  <React.Fragment>
+    { user ? <Welcome user={ user } /> : <SignIn /> }
+    <Title>{ title || '[loading...]' }</Title>
+  </React.Fragment>
 );
 
 const terms = { F: 'Fall', W: 'Winter', S: 'Spring'};
@@ -114,17 +147,17 @@ const saveCourse = (course, meets) => {
     .catch(error => alert(error));
 };
 
-const Course = ({ course, state }) => (
-<Button color={ buttonColor(state.selected.includes(course)) }
+const Course = ({ course, state, user }) => (
+  <Button color={ buttonColor(state.selected.includes(course)) }
     onClick={ () => state.toggle(course) }
-    onDoubleClick={ () => moveCourse(course) }
+    onDoubleClick={ user ? () => moveCourse(course) : null }
     disabled={ hasConflict(course, state.selected) }
     >
     { getCourseTerm(course) } CS { getCourseNumber(course) }: { course.title }
   </Button>
 );
 
-const CourseList = ({ courses }) => {
+const CourseList = ({ courses, user }) => {
   const [term, setTerm] = useState('Fall');
   const [selected, toggle] = useSelection();
   const termCourses = courses.filter(course => term === getCourseTerm(course));
@@ -135,7 +168,8 @@ const CourseList = ({ courses }) => {
       <Button.Group>
         { termCourses.map(course =>
            <Course key={ course.id } course={ course }
-             state={ { selected, toggle } } />) }
+             state={ { selected, toggle } }
+             user={ user } />) }
       </Button.Group>
     </React.Fragment>
   );
@@ -147,21 +181,26 @@ const buttonColor = selected => (
 
 const App = () => {
   const [schedule, setSchedule] = useState({ title: '', courses: [] });
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     const handleData = snap => {
       if (snap.val()) setSchedule(addScheduleTimes(snap.val()));
-    }
+    };
     db.on('value', handleData, error => alert(error));
     return () => { db.off('value', handleData); };
   }, []);
 
+  useEffect(() => {
+    firebase.auth().onAuthStateChanged(setUser);
+  }, []);
+
   return (
     <Container>
-      <Banner title={ schedule.title } />
-      <CourseList courses={ schedule.courses } />
+      <Banner title={ schedule.title } user={ user } />
+      <CourseList courses={ schedule.courses } user={ user } />
     </Container>
-);
+  );
 };
 
 export default App;
